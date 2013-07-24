@@ -99,7 +99,11 @@ def getSiteSoup(links):
 def getTheGoods(soup):
 	global allText, allResources
 	media = ['img', 'svg', 'video', 'picture']
-	outText = soup.find('div', {'id': 'sites-chrome-main-wrapper'}).text.encode('ascii', 'ignore')
+	if SITEHOST is 'sites.google.com':
+		outText = soup.find('div', {'id': 'sites-chrome-main-wrapper'}).text.encode('ascii', 'ignore')
+	else:
+		# generic text finder
+		outText = soup.body.text
 	outFiles = []
 	goods = soup.findAll(media)
 	# get resource paths
