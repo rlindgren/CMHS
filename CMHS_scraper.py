@@ -4,7 +4,7 @@
 import os, re, sys, urllib2, time
 from urllib import urlretrieve
 
-# some python installations include beautifulsoup4...
+# some python installations include beautifulsoup4 as bs4...
 try: 
 	from bs4 import BeautifulSoup as bs
 except: 
@@ -17,7 +17,8 @@ except:
 if (len(sys.argv) > 1):
 	URL = sys.argv[1]
 	if (len(sys.argv) > 2): 
-		FILEPATH = sys.argv[2]
+		if sys.argv[2] == '.': FILEPATH = os.getcwd()
+		else: FILEPATH = sys.argv[2]
 	else:
 		FILEPATH = os.getcwd()
 		try: 
@@ -32,14 +33,30 @@ try:
 except: 
 	HOSTNAME = URL
 
-# make directories
-os.chdir(FILEPATH)
-try: os.mkdir('media'); os.mkdir('text')
-except OSError: pass
+# hostname without https?://w?w?w?.?
+SITEHOST = re.match('https?://w?w?w?\.?(.*)/?.*?$', HOSTNAME).group(1)
+# clean up the hostname for use as directory name
+CLEANHOST = SITEHOST.replace('.', '')
+# path for main scrape dump directory
+FILEPATH = os.path.join(FILEPATH, CLEANHOST)
 
-# html tags to search through for resources
-media = ['img', 'svg', 'video', 'picture']
-text = ['div', 'article', 'p', 'a', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'font']
+print FILEPATH, HOSTNAME, SITEHOST, CLEANHOST
+
+# make directories to hold the goods and move to base dir (FILEPATH)
+try:
+	os.mkdir(FILEPATH); os.chdir(FILEPATH)
+	try: 
+		os.mkdir('media'); os.mkdir('text')
+	except: 
+		if not os.access('media', os.F_OK):
+			raise IOError("Could not create necessary directories. Try the command with 'sudo'.")
+except: 
+	try:
+		os.chdir(FILEPATH)
+		try: 
+			os.mkdir('media'); os.mkdir('text')
+		except: pass
+	except: raise IOError("Error creating directories. Permissions. Try again with 'sudo'.")
 
 # store site map
 siteMap = []
@@ -50,71 +67,87 @@ allText = ""
 allResources = []
 
 def getSoup(url):
-	page = urllib2.urlopen(url)
-	soup = bs(page.read())
-	siteSoup.append(soup)
-	return soup
+	return bs(urllib2.urlopen(url).read())
 
 def populateSiteMapArray(souped):
-	pattern = re.compile(URL)
-	try:
-		anchors = list(str(a['href']) for a in souped.findAll('a'))
+	links = souped.findAll('a')
+	try: 
+		anchors = list(a['href'] for a in links)
 	except:
 		anchors = []
-		for a in souped.findAll('a'):
+		for a in links:
 			try:
-				anchors.append(str(a['href']))
-			except:
-				pass
+				a = a['href']
+				anchors.append(a)
+			except: pass
+	#store only links under the hostname
 	for a in anchors:
-		if not a in siteMap and (re.search(pattern, a) > -1 or re.search('^/', a)):
-			if a[0] is '/': a = HOSTNAME + a
-			if not re.search('\?', a) and not re.search('system', a): 
+		if len(a) > 0:
+			if SITEHOST in a: 
 				siteMap.append(a)
+			if a[0] is '/': 
+				siteMap.append(os.path.join(HOSTNAME, a[1:]))
 
-def expandSiteMapAndGetSiteSoup():
+def expandSiteMapAndGetSiteSoup(siteMap):
 	for a in siteMap:
-		getSoup(a)
+		try: souper = getSoup(a)
+		except: souper = ''
+		if not souper is '' and not souper in siteSoup:
+			siteSoup.append(souper)
+		populateSiteMapArray(souper)
 
 def getTheGoods(souped):
 	global allText, allResources
-	outText = ""
+	media = ['img', 'svg', 'video', 'picture']
+	outText = souped.text
 	outFiles = []
-	goods = souped.findAll(media + text)
+	goods = souped.findAll(media)
+	# get resource paths
 	for el in goods:
-		# only download if unique
-		if el.text not in allText:
-			outText += el.text
 		try:
-			if el['src'] not in allResources:
-				outFiles.append(el['src'])
+			src = el['src']
+			if src not in allResources:
+				if src[0] is '/':
+						outFiles.append(os.path.join(HOSTNAME, src))
+				else:
+					outFiles.append(src)
 			else: pass
 		except: pass
-	# retain a store of all text and resource paths for the site, so no repeats!
-	allText += outText
+	# retain a store of all resource paths, so no repeats!
 	allResources += outFiles
 	_writeText(outText)
 	_saveMedia(outFiles)
 
 def _writeText(text):
-	filename = URL.split('/')[-1]
+	if len(URL.split('/')[-1]) > 0:
+		filename = URL.split('/')[-1].replace('.', '')
+	else:
+		filename = 'home'
+	# do some work to the filename to make it valid
 	mp = re.search('.', filename)
-	if mp: 
+	if mp.start(): 
 		filename = filename[:mp.start()]
 	else:
 		filename = filename + '_' + str(time.clock()).replace('.', '') + '.txt'
+	# do IO stuffs...
 	os.chdir(os.path.join(FILEPATH, "text"))
+	# open/create the file before writing to it
 	textfile = os.open(filename, os.O_RDWR|os.O_CREAT)
+	#convert from unicode to ascii
 	os.write(textfile, text.encode("ascii", "ignore"))
 	os.close(textfile)
 
 def _saveMedia(file_array):
-	dirname = URL.split('/')[-1]
+	if len(URL.split('/')[-1]) > 0:
+		dirname = URL.split('/')[-1].replace('.', '')
+	else:
+		dirname = 'home'
 	mp = re.search('.', dirname)
-	if mp: 
+	if mp.start(): 
 		dirname = dirname[:mp.start()] + str(time.clock()).replace('.', '')
 	else:
 		dirname = dirname + str(time.clock()).replace('.', '')
+	# do IO
 	os.chdir(os.path.join(FILEPATH, "media"))
 	# create and navigate to a new directory
 	os.mkdir(dirname); os.chdir(dirname)
@@ -135,9 +168,11 @@ def _saveMedia(file_array):
 # execution
 print('Scrape in progress...')
 soup = getSoup(URL)
+print('Populating Site Map...')
 populateSiteMapArray(soup)
-print('Expanding site map...')
-expandSiteMapAndGetSiteSoup()
+print('Expanding site map and stewing site soup...')
+expandSiteMapAndGetSiteSoup(siteMap)
+print siteMap
 print('Getting the goods...')
 for a in siteSoup:
 	getTheGoods(a)
