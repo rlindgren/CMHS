@@ -1,0 +1,35 @@
+# import some mods
+from bs4 import BeautifulS oup as bs
+import os, re, sys, urllib2
+from urllib import urlretrieve
+
+# set resource paths
+if (len(sys.argv) > 1):
+	URL = sys.argv[1]
+	if (len(sys.argv) > 2): 
+		FILEPATH = sys.argv[2]
+	else:
+		FILEPATH = os.path.realpath(__file__)
+
+# get soup
+page = urllib2.urlopen(URL)
+soup = bs(page.read())
+
+# html tags to search through for resources
+media = ['img', 'svg', 'video', 'picture']
+text = ['article', 'div', 'p', 'a', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']
+
+
+	
+# now retrieve the elements that match
+for i in soup.findAll(element):
+	try:
+		urlretrieve(i['src'], os.path.join(outpath,"images",i['src'].split('/')[-1]))
+	except:
+       		pattern = re.compile('\?')
+       		f = re.search(pattern, i['src']).start()
+		urlretrieve(i['src'][0:f], os.path.join(outpath,"images",i['src'][0:f]))
+	else:
+		print(i['src'] + "  " + "FAILED!"
+
+
