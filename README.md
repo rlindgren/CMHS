@@ -1,5 +1,5 @@
 #CMHS_scraper.py#
-#Tool for scraping content from old CMHS site
+Tool for scraping content from old CMHS site
 
 This tool should work with any site, in a general sense, and work well with Google Sites.  It has been optimized for use on the CMHS site.
 
